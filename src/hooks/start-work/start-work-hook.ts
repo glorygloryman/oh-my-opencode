@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs"
+import { join } from "node:path"
+
 import type { PluginInput } from "@opencode-ai/plugin"
 import {
   readBoulderState,
@@ -44,6 +47,35 @@ function findPlanByName(plans: string[], requestedName: string): string | null {
   
   const partialMatch = plans.find(p => getPlanName(p).toLowerCase().includes(lowerName))
   return partialMatch || null
+}
+
+interface SyncPlanResult {
+  success: boolean
+  targetPath?: string
+  error?: string
+}
+
+function syncPlanToProjectDocs(ctx: PluginInput, planPath: string): SyncPlanResult {
+  try {
+    const stat = statSync(planPath)
+    const date = new Date(stat.mtimeMs)
+    const dateStr = date.toISOString().split("T")[0] // YYYY-MM-DD
+    const planName = getPlanName(planPath)
+    const targetPath = join(ctx.directory, "project-docs", "plans", `${dateStr}-${planName}.md`)
+    
+    const targetDir = join(ctx.directory, "project-docs", "plans")
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true })
+    }
+    
+    const content = readFileSync(planPath, "utf-8")
+    writeFileSync(targetPath, content, "utf-8")
+    
+    return { success: true, targetPath }
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e)
+    return { success: false, error: err }
+  }
 }
 
 export function createStartWorkHook(ctx: PluginInput) {
@@ -105,6 +137,12 @@ All ${progress.total} tasks are done. Create a new plan with: /plan "your task"`
             const newState = createBoulderState(matchedPlan, sessionId, "atlas")
             writeBoulderState(ctx.directory, newState)
             
+            // 同步计划到 project-docs/plans
+            const syncResult = syncPlanToProjectDocs(ctx, matchedPlan)
+            const syncInfo = syncResult.success
+              ? `\n**Plan synced to**: ${syncResult.targetPath!.replace(ctx.directory, "").replace(/^[/\\]/, "")}`
+              : ""
+            
             contextInfo = `
 ## Auto-Selected Plan
 
@@ -112,7 +150,7 @@ All ${progress.total} tasks are done. Create a new plan with: /plan "your task"`
 **Path**: ${matchedPlan}
 **Progress**: ${progress.completed}/${progress.total} tasks
 **Session ID**: ${sessionId}
-**Started**: ${timestamp}
+**Started**: ${timestamp}${syncInfo}
 
 boulder.json has been created. Read the plan and begin execution.`
           }
@@ -190,6 +228,12 @@ All ${plans.length} plan(s) are complete. Create a new plan with: /plan "your ta
           const newState = createBoulderState(planPath, sessionId, "atlas")
           writeBoulderState(ctx.directory, newState)
 
+          // 同步计划到 project-docs/plans
+          const syncResult = syncPlanToProjectDocs(ctx, planPath)
+          const syncInfo = syncResult.success
+            ? `\n**Plan synced to**: ${syncResult.targetPath!.replace(ctx.directory, "").replace(/^[/\\]/, "")}`
+            : ""
+          
           contextInfo += `
 
 ## Auto-Selected Plan
@@ -198,7 +242,7 @@ All ${plans.length} plan(s) are complete. Create a new plan with: /plan "your ta
 **Path**: ${planPath}
 **Progress**: ${progress.completed}/${progress.total} tasks
 **Session ID**: ${sessionId}
-**Started**: ${timestamp}
+**Started**: ${timestamp}${syncInfo}
 
 boulder.json has been created. Read the plan and begin execution.`
         } else {
@@ -211,7 +255,7 @@ boulder.json has been created. Read the plan and begin execution.`
 
           contextInfo += `
 
-<system-reminder>
+<system-rem-reminder>
 ## Multiple Plans Found
 
 Current Time: ${timestamp}
