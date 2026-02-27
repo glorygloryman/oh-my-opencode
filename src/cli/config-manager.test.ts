@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
+import { describe, expect, test, mock, afterEach } from "bun:test"
 
 import { ANTIGRAVITY_PROVIDER_CONFIG, getPluginNameWithVersion, fetchNpmDistTags, generateOmoConfig } from "./config-manager"
 import type { InstallConfig } from "./types"
@@ -58,7 +58,7 @@ describe("getPluginNameWithVersion", () => {
     expect(result).toBe("oh-my-opencode@next")
   })
 
-  test("returns pinned version when no tag matches", async () => {
+  test("returns prerelease channel tag when no dist-tag matches prerelease version", async () => {
     // #given npm dist-tags with beta=3.0.0-beta.3
     globalThis.fetch = mock(() =>
       Promise.resolve({
@@ -70,22 +70,22 @@ describe("getPluginNameWithVersion", () => {
     // #when current version is old beta 3.0.0-beta.2
     const result = await getPluginNameWithVersion("3.0.0-beta.2")
 
-    // #then should pin to specific version
-    expect(result).toBe("oh-my-opencode@3.0.0-beta.2")
+    // #then should preserve prerelease channel
+    expect(result).toBe("oh-my-opencode@beta")
   })
 
-  test("returns pinned version when fetch fails", async () => {
+  test("returns prerelease channel tag when fetch fails", async () => {
     // #given network failure
     globalThis.fetch = mock(() => Promise.reject(new Error("Network error"))) as unknown as typeof fetch
 
     // #when current version is 3.0.0-beta.3
     const result = await getPluginNameWithVersion("3.0.0-beta.3")
 
-    // #then should fall back to pinned version
-    expect(result).toBe("oh-my-opencode@3.0.0-beta.3")
+    // #then should preserve prerelease channel
+    expect(result).toBe("oh-my-opencode@beta")
   })
 
-  test("returns pinned version when npm returns non-ok response", async () => {
+  test("returns bare package name when npm returns non-ok response for stable version", async () => {
     // #given npm returns 404
     globalThis.fetch = mock(() =>
       Promise.resolve({
@@ -97,8 +97,8 @@ describe("getPluginNameWithVersion", () => {
     // #when current version is 2.14.0
     const result = await getPluginNameWithVersion("2.14.0")
 
-    // #then should fall back to pinned version
-    expect(result).toBe("oh-my-opencode@2.14.0")
+    // #then should fall back to bare package entry
+    expect(result).toBe("oh-my-opencode")
   })
 
   test("prioritizes latest over other tags when version matches multiple", async () => {
@@ -178,7 +178,7 @@ describe("config-manager ANTIGRAVITY_PROVIDER_CONFIG", () => {
     expect(models).toBeTruthy()
 
     const required = [
-      "antigravity-gemini-3-pro",
+      "antigravity-gemini-3.1-pro",
       "antigravity-gemini-3-flash",
       "antigravity-claude-sonnet-4-6",
       "antigravity-claude-sonnet-4-6-thinking",
@@ -206,7 +206,7 @@ describe("config-manager ANTIGRAVITY_PROVIDER_CONFIG", () => {
     const models = (ANTIGRAVITY_PROVIDER_CONFIG as any).google.models as Record<string, any>
 
     // #when checking Gemini Pro variants
-    const pro = models["antigravity-gemini-3-pro"]
+    const pro = models["antigravity-gemini-3.1-pro"]
     // #then should have low and high variants
     expect(pro.variants).toBeTruthy()
     expect(pro.variants.low).toBeTruthy()
@@ -240,52 +240,6 @@ describe("config-manager ANTIGRAVITY_PROVIDER_CONFIG", () => {
 })
 
 describe("generateOmoConfig - model fallback system", () => {
-  test("generates sonnet model with ultrawork opus for Claude standard subscription", () => {
-    // #given user has Claude standard subscription (not max20)
-    const config: InstallConfig = {
-      hasClaude: true,
-      isMax20: false,
-      hasOpenAI: false,
-      hasGemini: false,
-      hasCopilot: false,
-      hasOpencodeZen: false,
-      hasZaiCodingPlan: false,
-      hasKimiForCoding: false,
-    }
-
-    // #when generating config
-    const result = generateOmoConfig(config)
-
-    // #then Sisyphus uses sonnet for daily driving with ultrawork opus override
-    const sisyphus = (result.agents as Record<string, { model: string; variant?: string; ultrawork?: { model: string; variant?: string } }>).sisyphus
-    expect(result.$schema).toBe("https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/master/assets/oh-my-opencode.schema.json")
-    expect(sisyphus.model).toBe("anthropic/claude-sonnet-4-6")
-    expect(sisyphus.variant).toBe("max")
-    expect(sisyphus.ultrawork).toEqual({ model: "anthropic/claude-opus-4-6", variant: "max" })
-  })
-
-  test("generates native opus models without ultrawork when Claude max20 subscription", () => {
-    // #given user has Claude max20 subscription
-    const config: InstallConfig = {
-      hasClaude: true,
-      isMax20: true,
-      hasOpenAI: false,
-      hasGemini: false,
-      hasCopilot: false,
-      hasOpencodeZen: false,
-      hasZaiCodingPlan: false,
-      hasKimiForCoding: false,
-    }
-
-    // #when generating config
-    const result = generateOmoConfig(config)
-
-    // #then Sisyphus uses opus directly, no ultrawork override needed
-    const sisyphus = (result.agents as Record<string, { model: string; ultrawork?: unknown }>).sisyphus
-    expect(sisyphus.model).toBe("anthropic/claude-opus-4-6")
-    expect(sisyphus.ultrawork).toBeUndefined()
-  })
-
   test("uses github-copilot sonnet fallback when only copilot available", () => {
     // #given user has only copilot (no max plan)
     const config: InstallConfig = {
@@ -327,7 +281,7 @@ describe("generateOmoConfig - model fallback system", () => {
     expect((result.agents as Record<string, { model: string }>).sisyphus).toBeUndefined()
   })
 
-  test("uses zai-coding-plan/glm-4.7 for librarian when Z.ai available", () => {
+  test("uses ZAI model for librarian when Z.ai is available", () => {
     // #given user has Z.ai and Claude max20
     const config: InstallConfig = {
       hasClaude: true,
@@ -343,7 +297,7 @@ describe("generateOmoConfig - model fallback system", () => {
     // #when generating config
     const result = generateOmoConfig(config)
 
-    // #then librarian should use zai-coding-plan/glm-4.7
+    // #then librarian should use ZAI model
     expect((result.agents as Record<string, { model: string }>).librarian.model).toBe("zai-coding-plan/glm-4.7")
     // #then Sisyphus uses Claude (OR logic)
     expect((result.agents as Record<string, { model: string }>).sisyphus.model).toBe("anthropic/claude-opus-4-6")

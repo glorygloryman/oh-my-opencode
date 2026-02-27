@@ -1,8 +1,14 @@
 import type { AgentConfig } from "@opencode-ai/sdk";
 import type { AgentMode, AgentPromptMetadata } from "./types";
-import { isGptModel } from "./types";
+import { isGptModel, isGeminiModel } from "./types";
+import {
+  buildGeminiToolMandate,
+  buildGeminiDelegationOverride,
+  buildGeminiVerificationOverride,
+  buildGeminiIntentGateEnforcement,
+} from "./sisyphus-gemini-overlays";
 
-const MODE: AgentMode = "primary";
+const MODE: AgentMode = "all";
 export const SISYPHUS_PROMPT_METADATA: AgentPromptMetadata = {
   category: "utility",
   cost: "EXPENSIVE",
@@ -25,6 +31,7 @@ import {
   buildOracleSection,
   buildHardBlocksSection,
   buildAntiPatternsSection,
+  buildDeepParallelSection,
   categorizeTools,
 } from "./dynamic-agent-prompt-builder";
 
@@ -139,6 +146,7 @@ Should I proceed with [recommendation], or would you prefer differently?
 }
 
 function buildDynamicSisyphusPrompt(
+  model: string,
   availableAgents: AvailableAgent[],
   availableTools: AvailableTool[] = [],
   availableSkills: AvailableSkill[] = [],
@@ -161,6 +169,7 @@ function buildDynamicSisyphusPrompt(
   const oracleSection = buildOracleSection(availableAgents);
   const hardBlocks = buildHardBlocksSection();
   const antiPatterns = buildAntiPatternsSection();
+  const deepParallelSection = buildDeepParallelSection(model, availableCategories);
   const taskManagementSection = buildTaskManagementSection(useTaskSystem);
   const todoHookNote = useTaskSystem
     ? "YOUR TASK CREATION WOULD BE TRACKED BY HOOK([SYSTEM REMINDER - TASK CONTINUATION])"
@@ -189,6 +198,29 @@ You are "Sisyphus" - Powerful AI Agent with orchestration capabilities from OhMy
 ## Phase 0 - Intent Gate (EVERY message)
 
 ${keyTriggers}
+
+<intent_verbalization>
+### Step 0: Verbalize Intent (BEFORE Classification)
+
+Before classifying the task, identify what the user actually wants from you as an orchestrator. Map the surface form to the true intent, then announce your routing decision out loud.
+
+**Intent → Routing Map:**
+
+| Surface Form | True Intent | Your Routing |
+|---|---|---|
+| "explain X", "how does Y work" | Research/understanding | explore/librarian → synthesize → answer |
+| "implement X", "add Y", "create Z" | Implementation (explicit) | plan → delegate or execute |
+| "look into X", "check Y", "investigate" | Investigation | explore → report findings |
+| "what do you think about X?" | Evaluation | evaluate → propose → **wait for confirmation** |
+| "I'm seeing error X" / "Y is broken" | Fix needed | diagnose → fix minimally |
+| "refactor", "improve", "clean up" | Open-ended change | assess codebase first → propose approach |
+
+**Verbalize before proceeding:**
+
+> "I detect [research / implementation / investigation / evaluation / fix / open-ended] intent — [reason]. My approach: [explore → answer / plan → delegate / clarify first / etc.]."
+
+This verbalization anchors your routing decision and makes your reasoning transparent to the user. It does NOT commit you to implementation — only the user's explicit request does that.
+</intent_verbalization>
 
 ### Step 1: Classify Request Type
 
@@ -304,12 +336,11 @@ result = task(..., run_in_background=false)  // Never wait synchronously for exp
 \`\`\`
 
 ### Background Result Collection:
-1. Launch parallel agents → receive task_ids
-2. Continue immediate work
-3. When results needed: \`background_output(task_id=\"...\")\`
-4. Before final answer, cancel DISPOSABLE tasks (explore, librarian) individually: \`background_cancel(taskId=\"bg_explore_xxx\")\`, \`background_cancel(taskId=\"bg_librarian_xxx\")\`
-5. **NEVER cancel Oracle.** ALWAYS collect Oracle result via \`background_output(task_id=\"bg_oracle_xxx\")\` before answering — even if you already have enough context.
-6. **NEVER use \`background_cancel(all=true)\`** — it kills Oracle. Cancel each disposable task by its specific taskId.
+1. Launch parallel agents \u2192 receive task_ids
+2. Continue immediate work (explore, librarian results)
+3. When results needed: \`background_output(task_id="...")\`
+4. **If Oracle is running**: STOP all other output. Follow Oracle Completion Protocol in <Oracle_Usage>.
+5. Cleanup: Cancel disposable tasks (explore, librarian) individually via \`background_cancel(taskId="...")\`. Never use \`background_cancel(all=true)\`.
 
 ### Search Stop Conditions
 
@@ -332,6 +363,8 @@ STOP searching when:
 3. Mark \`completed\` as soon as done (don't batch) - OBSESSIVELY TRACK YOUR WORK USING TODO TOOLS
 
 ${categorySkillsGuide}
+
+${deepParallelSection}
 
 ${delegationTable}
 
@@ -444,9 +477,9 @@ If verification fails:
 3. Report: "Done. Note: found N pre-existing lint errors unrelated to my changes."
 
 ### Before Delivering Final Answer:
-- Cancel DISPOSABLE background tasks (explore, librarian) individually via \`background_cancel(taskId=\"...\")\`
-- **NEVER use \`background_cancel(all=true)\`.** Always cancel individually by taskId.
-- **Always wait for Oracle**: When Oracle is running and you have gathered enough context from your own exploration, your next action is \`background_output\` on Oracle — NOT delivering a final answer. Oracle's value is highest when you think you don't need it.
+- **If Oracle is running**: STOP. Follow Oracle Completion Protocol in <Oracle_Usage>. Do NOT deliver any answer.
+- Cancel disposable background tasks (explore, librarian) individually via \`background_cancel(taskId="...")\`.
+- **Never use \`background_cancel(all=true)\`.**
 </Behavior_Instructions>
 
 ${oracleSection}
@@ -520,15 +553,25 @@ export function createSisyphusAgent(
   const tools = availableToolNames ? categorizeTools(availableToolNames) : [];
   const skills = availableSkills ?? [];
   const categories = availableCategories ?? [];
-  const prompt = availableAgents
+  let prompt = availableAgents
     ? buildDynamicSisyphusPrompt(
+        model,
         availableAgents,
         tools,
         skills,
         categories,
         useTaskSystem,
       )
-    : buildDynamicSisyphusPrompt([], tools, skills, categories, useTaskSystem);
+    : buildDynamicSisyphusPrompt(model, [], tools, skills, categories, useTaskSystem);
+
+  if (isGeminiModel(model)) {
+    prompt = prompt.replace(
+      "</intent_verbalization>",
+      `</intent_verbalization>\n\n${buildGeminiIntentGateEnforcement()}\n\n${buildGeminiToolMandate()}`
+    );
+    prompt += "\n" + buildGeminiDelegationOverride();
+    prompt += "\n" + buildGeminiVerificationOverride();
+  }
 
   const permission = {
     question: "allow",

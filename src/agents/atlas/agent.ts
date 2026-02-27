@@ -6,20 +6,21 @@
  *
  * Routing:
  * 1. GPT models (openai/*, github-copilot/gpt-*) → gpt.ts (GPT-5.2 optimized)
- * 2. Default (Claude, etc.) → default.ts (Claude-optimized)
+ * 2. Gemini models (google/*, google-vertex/*) → gemini.ts (Gemini-optimized)
+ * 3. Default (Claude, etc.) → default.ts (Claude-optimized)
  */
 
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode, AgentPromptMetadata } from "../types"
-import { isGptModel } from "../types"
+import { isGptModel, isGeminiModel } from "../types"
 import type { AvailableAgent, AvailableSkill, AvailableCategory } from "../dynamic-agent-prompt-builder"
 import { buildCategorySkillsDelegationGuide } from "../dynamic-agent-prompt-builder"
 import type { CategoryConfig } from "../../config/schema"
 import { mergeCategories } from "../../shared/merge-categories"
-import { createAgentToolRestrictions } from "../../shared/permission-compat"
 
 import { getDefaultAtlasPrompt } from "./default"
 import { getGptAtlasPrompt } from "./gpt"
+import { getGeminiAtlasPrompt } from "./gemini"
 import {
   getCategoryDescription,
   buildAgentSelectionSection,
@@ -28,9 +29,9 @@ import {
   buildDecisionMatrix,
 } from "./prompt-section-builder"
 
-const MODE: AgentMode = "primary"
+const MODE: AgentMode = "all"
 
-export type AtlasPromptSource = "default" | "gpt"
+export type AtlasPromptSource = "default" | "gpt" | "gemini"
 
 /**
  * Determines which Atlas prompt to use based on model.
@@ -38,6 +39,9 @@ export type AtlasPromptSource = "default" | "gpt"
 export function getAtlasPromptSource(model?: string): AtlasPromptSource {
   if (model && isGptModel(model)) {
     return "gpt"
+  }
+  if (model && isGeminiModel(model)) {
+    return "gemini"
   }
   return "default"
 }
@@ -58,6 +62,8 @@ export function getAtlasPrompt(model?: string): string {
   switch (source) {
     case "gpt":
       return getGptAtlasPrompt()
+    case "gemini":
+      return getGeminiAtlasPrompt()
     case "default":
     default:
       return getDefaultAtlasPrompt()
@@ -93,11 +99,6 @@ function buildDynamicOrchestratorPrompt(ctx?: OrchestratorContext): string {
 }
 
 export function createAtlasAgent(ctx: OrchestratorContext): AgentConfig {
-  const restrictions = createAgentToolRestrictions([
-    "task",
-    "call_omo_agent",
-  ])
-
   const baseConfig = {
     description:
       "Orchestrates work via task() to complete ALL tasks in a todo list until fully done. (Atlas - OhMyOpenCode)",
@@ -106,7 +107,6 @@ export function createAtlasAgent(ctx: OrchestratorContext): AgentConfig {
     temperature: 0.1,
     prompt: buildDynamicOrchestratorPrompt(ctx),
     color: "#10B981",
-    ...restrictions,
   }
 
   return baseConfig as AgentConfig

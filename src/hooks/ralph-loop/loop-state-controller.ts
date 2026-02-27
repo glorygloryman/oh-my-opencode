@@ -23,7 +23,9 @@ export function createLoopStateController(options: {
 			loopOptions?: {
 				maxIterations?: number
 				completionPromise?: string
+				messageCountAtStart?: number
 				ultrawork?: boolean
+				strategy?: "reset" | "continue"
 			},
 		): boolean {
 			const state: RalphLoopState = {
@@ -33,10 +35,12 @@ export function createLoopStateController(options: {
 					loopOptions?.maxIterations ??
 					config?.default_max_iterations ??
 					DEFAULT_MAX_ITERATIONS,
+				message_count_at_start: loopOptions?.messageCountAtStart,
 				completion_promise:
 					loopOptions?.completionPromise ??
 					DEFAULT_COMPLETION_PROMISE,
 				ultrawork: loopOptions?.ultrawork,
+				strategy: loopOptions?.strategy ?? config?.default_strategy ?? "continue",
 				started_at: new Date().toISOString(),
 				prompt,
 				session_id: sessionID,
@@ -76,6 +80,34 @@ export function createLoopStateController(options: {
 
 		incrementIteration(): RalphLoopState | null {
 			return incrementIteration(directory, stateDir)
+		},
+
+		setSessionID(sessionID: string): RalphLoopState | null {
+			const state = readState(directory, stateDir)
+			if (!state) {
+				return null
+			}
+
+			state.session_id = sessionID
+			if (!writeState(directory, state, stateDir)) {
+				return null
+			}
+
+			return state
+		},
+
+		setMessageCountAtStart(sessionID: string, messageCountAtStart: number): RalphLoopState | null {
+			const state = readState(directory, stateDir)
+			if (!state || state.session_id !== sessionID) {
+				return null
+			}
+
+			state.message_count_at_start = messageCountAtStart
+			if (!writeState(directory, state, stateDir)) {
+				return null
+			}
+
+			return state
 		},
 	}
 }

@@ -421,16 +421,15 @@ describe("generateModelConfig", () => {
       expect(result.agents?.hephaestus?.variant).toBe("medium")
     })
 
-    test("Hephaestus is created when Copilot is available (github-copilot provider connected)", () => {
+    test("Hephaestus is NOT created when only Copilot is available (gpt-5.3-codex unavailable on github-copilot)", () => {
       // #given
       const config = createConfig({ hasCopilot: true })
 
       // #when
       const result = generateModelConfig(config)
 
-      // #then
-      expect(result.agents?.hephaestus?.model).toBe("github-copilot/gpt-5.3-codex")
-      expect(result.agents?.hephaestus?.variant).toBe("medium")
+      // #then - hephaestus is omitted because gpt-5.3-codex is not available on github-copilot
+      expect(result.agents?.hephaestus).toBeUndefined()
     })
 
     test("Hephaestus is created when OpenCode Zen is available (opencode provider connected)", () => {
@@ -480,7 +479,7 @@ describe("generateModelConfig", () => {
   })
 
   describe("librarian agent special cases", () => {
-    test("librarian uses ZAI when ZAI is available regardless of other providers", () => {
+    test("librarian uses ZAI model when ZAI is available regardless of other providers", () => {
       // #given ZAI and Claude are available
       const config = createConfig({
         hasClaude: true,
@@ -494,15 +493,15 @@ describe("generateModelConfig", () => {
       expect(result.agents?.librarian?.model).toBe("zai-coding-plan/glm-4.7")
     })
 
-    test("librarian uses claude-sonnet when ZAI not available but Claude is", () => {
+    test("librarian falls back to generic chain result when no librarian provider matches", () => {
       // #given only Claude is available (no ZAI)
       const config = createConfig({ hasClaude: true })
 
       // #when generateModelConfig is called
       const result = generateModelConfig(config)
 
-      // #then librarian should use claude-sonnet-4-6 (third in fallback chain after ZAI and opencode/glm)
-      expect(result.agents?.librarian?.model).toBe("anthropic/claude-sonnet-4-6")
+      // #then librarian should use generic chain result when chain providers are unavailable
+      expect(result.agents?.librarian?.model).toBe("anthropic/claude-sonnet-4-5")
     })
   })
 

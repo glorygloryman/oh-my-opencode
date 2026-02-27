@@ -24,19 +24,7 @@
     "disabled_agents": {
       "type": "array",
       "items": {
-        "type": "string",
-        "enum": [
-          "sisyphus",
-          "hephaestus",
-          "prometheus",
-          "oracle",
-          "librarian",
-          "explore",
-          "multimodal-looker",
-          "metis",
-          "momus",
-          "atlas"
-        ]
+        "type": "string"
       }
     },
     "disabled_skills": {
@@ -55,55 +43,7 @@
     "disabled_hooks": {
       "type": "array",
       "items": {
-        "type": "string",
-        "enum": [
-          "todo-continuation-enforcer",
-          "context-window-monitor",
-          "session-recovery",
-          "session-notification",
-          "comment-checker",
-          "grep-output-truncator",
-          "tool-output-truncator",
-          "question-label-truncator",
-          "directory-agents-injector",
-          "directory-readme-injector",
-          "empty-task-response-detector",
-          "think-mode",
-          "anthropic-context-window-limit-recovery",
-          "preemptive-compaction",
-          "rules-injector",
-          "background-notification",
-          "auto-update-checker",
-          "startup-toast",
-          "keyword-detector",
-          "agent-usage-reminder",
-          "non-interactive-env",
-          "interactive-bash-session",
-          "thinking-block-validator",
-          "ultrawork-model-override",
-          "ralph-loop",
-          "category-skill-reminder",
-          "compaction-context-injector",
-          "compaction-todo-preserver",
-          "claude-code-hooks",
-          "auto-slash-command",
-          "edit-error-recovery",
-          "json-error-recovery",
-          "delegate-task-retry",
-          "prometheus-md-only",
-          "sisyphus-junior-notepad",
-          "no-sisyphus-gpt",
-          "start-work",
-          "atlas",
-          "unstable-agent-babysitter",
-          "task-reminder",
-          "task-resume-info",
-          "stop-continuation-guard",
-          "tasks-todowrite-disabler",
-          "write-existing-file-guard",
-          "anthropic-effort",
-          "hashline-read-enhancer"
-        ]
+        "type": "string"
       }
     },
     "disabled_commands": {
@@ -127,6 +67,12 @@
         "type": "string"
       }
     },
+    "hashline_edit": {
+      "type": "boolean"
+    },
+    "model_fallback": {
+      "type": "boolean"
+    },
     "agents": {
       "type": "object",
       "properties": {
@@ -135,6 +81,19 @@
           "properties": {
             "model": {
               "type": "string"
+            },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
             },
             "variant": {
               "type": "string"
@@ -285,21 +244,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -323,6 +267,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -333,6 +301,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -482,21 +463,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -520,6 +486,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -530,6 +520,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -679,21 +682,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -717,6 +705,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -727,6 +739,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -876,21 +901,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -914,6 +924,33 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "allow_non_gpt_model": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -924,6 +961,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -1073,21 +1123,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -1111,6 +1146,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -1121,6 +1180,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -1270,21 +1342,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -1308,6 +1365,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -1318,6 +1399,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -1467,21 +1561,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -1505,6 +1584,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -1515,6 +1618,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -1664,21 +1780,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -1702,6 +1803,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -1712,6 +1837,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -1861,21 +1999,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -1899,6 +2022,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -1909,6 +2056,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -2058,21 +2218,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -2096,6 +2241,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -2106,6 +2275,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -2255,21 +2437,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -2293,6 +2460,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -2303,6 +2494,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -2452,21 +2656,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -2490,6 +2679,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -2500,6 +2713,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -2649,21 +2875,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -2687,6 +2898,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -2697,6 +2932,19 @@
             "model": {
               "type": "string"
             },
+            "fallback_models": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
             "variant": {
               "type": "string"
             },
@@ -2846,21 +3094,6 @@
               ],
               "additionalProperties": false
             },
-            "ultrawork": {
-              "type": "object",
-              "properties": {
-                "model": {
-                  "type": "string"
-                },
-                "variant": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "model"
-              ],
-              "additionalProperties": false
-            },
             "reasoningEffort": {
               "type": "string",
               "enum": [
@@ -2884,6 +3117,30 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "ultrawork": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "compaction": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -2904,6 +3161,19 @@
           },
           "model": {
             "type": "string"
+          },
+          "fallback_models": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
           },
           "variant": {
             "type": "string"
@@ -2968,6 +3238,11 @@
           },
           "prompt_append": {
             "type": "string"
+          },
+          "max_prompt_tokens": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           },
           "is_unstable_agent": {
             "type": "boolean"
@@ -3180,7 +3455,13 @@
         "safe_hook_creation": {
           "type": "boolean"
         },
+        "disable_omo_env": {
+          "type": "boolean"
+        },
         "hashline_edit": {
+          "type": "boolean"
+        },
+        "model_fallback_title": {
           "type": "boolean"
         }
       },
@@ -3315,13 +3596,60 @@
         },
         "state_dir": {
           "type": "string"
+        },
+        "default_strategy": {
+          "default": "continue",
+          "type": "string",
+          "enum": [
+            "reset",
+            "continue"
+          ]
         }
       },
       "required": [
         "enabled",
-        "default_max_iterations"
+        "default_max_iterations",
+        "default_strategy"
       ],
       "additionalProperties": false
+    },
+    "runtime_fallback": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "retry_on_errors": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "max_fallback_attempts": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "cooldown_seconds": {
+              "type": "number",
+              "minimum": 0
+            },
+            "timeout_seconds": {
+              "type": "number",
+              "minimum": 0
+            },
+            "notify_on_fallback": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "background_task": {
       "type": "object",

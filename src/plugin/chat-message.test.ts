@@ -19,6 +19,7 @@ function createMockHandlerArgs(overrides?: {
     },
     hooks: {
       stopContinuationGuard: null,
+      backgroundNotificationHook: null,
       keywordDetector: null,
       claudeCodeHooks: null,
       autoSlashCommand: null,
@@ -45,9 +46,9 @@ function createMockOutput(variant?: string): ChatMessageHandlerOutput {
   return { message, parts: [] }
 }
 
-describe("createChatMessageHandler - first message variant", () => {
-  test("first message: sets variant from fallback chain when user has no selection", async () => {
-    //#given - first message, no user-selected variant, hephaestus with medium in chain
+describe("createChatMessageHandler - TUI variant passthrough", () => {
+  test("first message: does not override TUI variant when user has no selection", async () => {
+    //#given - first message, no user-selected variant
     const args = createMockHandlerArgs({ shouldOverride: true })
     const handler = createChatMessageHandler(args)
     const input = createMockInput("hephaestus", { providerID: "openai", modelID: "gpt-5.3-codex" })
@@ -56,8 +57,8 @@ describe("createChatMessageHandler - first message variant", () => {
     //#when
     await handler(input, output)
 
-    //#then - should set variant from fallback chain
-    expect(output.message["variant"]).toBeDefined()
+    //#then - TUI sent undefined, should stay undefined (no config override)
+    expect(output.message["variant"]).toBeUndefined()
   })
 
   test("first message: preserves user-selected variant when already set", async () => {
@@ -70,25 +71,11 @@ describe("createChatMessageHandler - first message variant", () => {
     //#when
     await handler(input, output)
 
-    //#then - user's xhigh must be preserved, not overwritten to "medium"
+    //#then - user's xhigh must be preserved
     expect(output.message["variant"]).toBe("xhigh")
   })
 
-  test("first message: preserves user-selected 'high' variant", async () => {
-    //#given - user selected "high" variant
-    const args = createMockHandlerArgs({ shouldOverride: true })
-    const handler = createChatMessageHandler(args)
-    const input = createMockInput("hephaestus", { providerID: "openai", modelID: "gpt-5.3-codex" })
-    const output = createMockOutput("high")
-
-    //#when
-    await handler(input, output)
-
-    //#then
-    expect(output.message["variant"]).toBe("high")
-  })
-
-  test("subsequent message: does not override existing variant", async () => {
+  test("subsequent message: preserves TUI variant", async () => {
     //#given - not first message, variant already set
     const args = createMockHandlerArgs({ shouldOverride: false })
     const handler = createChatMessageHandler(args)
@@ -100,6 +87,20 @@ describe("createChatMessageHandler - first message variant", () => {
 
     //#then
     expect(output.message["variant"]).toBe("xhigh")
+  })
+
+  test("subsequent message: does not inject variant when TUI sends none", async () => {
+    //#given - not first message, no variant from TUI
+    const args = createMockHandlerArgs({ shouldOverride: false })
+    const handler = createChatMessageHandler(args)
+    const input = createMockInput("hephaestus", { providerID: "openai", modelID: "gpt-5.3-codex" })
+    const output = createMockOutput() // no variant
+
+    //#when
+    await handler(input, output)
+
+    //#then - should stay undefined, not auto-resolved from config
+    expect(output.message["variant"]).toBeUndefined()
   })
 
   test("first message: marks gate as applied regardless of variant presence", async () => {
@@ -114,5 +115,31 @@ describe("createChatMessageHandler - first message variant", () => {
 
     //#then - gate should still be marked as applied
     expect(args._appliedSessions).toContain("test-session")
+  })
+
+  test("injects queued background notifications through chat.message hook", async () => {
+    //#given
+    const args = createMockHandlerArgs()
+    args.hooks.backgroundNotificationHook = {
+      "chat.message": async (
+        _input: { sessionID: string },
+        output: ChatMessageHandlerOutput,
+      ): Promise<void> => {
+        output.parts.push({
+          type: "text",
+          text: "<system-reminder>[BACKGROUND TASK COMPLETED]</system-reminder>",
+        })
+      },
+    }
+    const handler = createChatMessageHandler(args)
+    const input = createMockInput("hephaestus", { providerID: "openai", modelID: "gpt-5.3-codex" })
+    const output = createMockOutput()
+
+    //#when
+    await handler(input, output)
+
+    //#then
+    expect(output.parts).toHaveLength(1)
+    expect(output.parts[0].text).toContain("[BACKGROUND TASK COMPLETED]")
   })
 })

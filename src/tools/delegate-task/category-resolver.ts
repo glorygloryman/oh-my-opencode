@@ -1,6 +1,7 @@
 import type { ModelFallbackInfo } from "../../features/task-toast-manager/types"
 import type { DelegateTaskArgs } from "./types"
 import type { ExecutorContext } from "./executor-types"
+import type { FallbackEntry } from "../../shared/model-requirements"
 import { mergeCategories } from "../../shared/merge-categories"
 import { SISYPHUS_JUNIOR_AGENT } from "./sisyphus-junior-agent"
 import { resolveCategoryConfig } from "./categories"
@@ -13,9 +14,11 @@ export interface CategoryResolutionResult {
   agentToUse: string
   categoryModel: { providerID: string; modelID: string; variant?: string } | undefined
   categoryPromptAppend: string | undefined
+  maxPromptTokens?: number
   modelInfo: ModelFallbackInfo | undefined
   actualModel: string | undefined
   isUnstableAgent: boolean
+  fallbackChain?: FallbackEntry[]  // For runtime retry on model errors
   error?: string
 }
 
@@ -49,6 +52,7 @@ export async function resolveCategoryExecution(
         agentToUse: "",
         categoryModel: undefined,
         categoryPromptAppend: undefined,
+        maxPromptTokens: undefined,
         modelInfo: undefined,
         actualModel: undefined,
         isUnstableAgent: false,
@@ -66,6 +70,7 @@ Available categories: ${allCategoryNames}`,
       agentToUse: "",
       categoryModel: undefined,
       categoryPromptAppend: undefined,
+      maxPromptTokens: undefined,
       modelInfo: undefined,
       actualModel: undefined,
       isUnstableAgent: false,
@@ -109,6 +114,7 @@ Available categories: ${allCategoryNames}`,
           agentToUse: "",
           categoryModel: undefined,
           categoryPromptAppend: undefined,
+          maxPromptTokens: undefined,
           modelInfo: undefined,
           actualModel: undefined,
           isUnstableAgent: false,
@@ -152,6 +158,7 @@ Available categories: ${allCategoryNames}`,
       agentToUse: "",
       categoryModel: undefined,
       categoryPromptAppend: undefined,
+      maxPromptTokens: undefined,
       modelInfo: undefined,
       actualModel: undefined,
       isUnstableAgent: false,
@@ -168,14 +175,17 @@ Available categories: ${categoryNames.join(", ")}`,
   }
 
   const unstableModel = actualModel?.toLowerCase()
-  const isUnstableAgent = resolved.config.is_unstable_agent === true || (unstableModel ? unstableModel.includes("gemini") || unstableModel.includes("minimax") : false)
+  const categoryConfigModel = resolved.config.model?.toLowerCase()
+  const isUnstableAgent = resolved.config.is_unstable_agent === true || [unstableModel, categoryConfigModel].some(m => m ? m.includes("gemini") || m.includes("minimax") || m.includes("kimi") : false)
 
   return {
     agentToUse: SISYPHUS_JUNIOR_AGENT,
     categoryModel,
     categoryPromptAppend,
+    maxPromptTokens: resolved.config.max_prompt_tokens,
     modelInfo,
     actualModel,
     isUnstableAgent,
+    fallbackChain: requirement?.fallbackChain,
   }
 }

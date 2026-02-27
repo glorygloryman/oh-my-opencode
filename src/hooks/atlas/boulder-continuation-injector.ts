@@ -1,9 +1,10 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { BackgroundManager } from "../../features/background-agent"
 import { log } from "../../shared/logger"
+import { createInternalAgentTextPart, resolveInheritedPromptTools } from "../../shared"
 import { HOOK_NAME } from "./hook-name"
 import { BOULDER_CONTINUATION_PROMPT } from "./system-reminder-templates"
-import { resolveRecentModelForSession } from "./recent-model-resolver"
+import { resolveRecentPromptContextForSession } from "./recent-model-resolver"
 import type { SessionState } from "./types"
 
 export async function injectBoulderContinuation(input: {
@@ -13,6 +14,7 @@ export async function injectBoulderContinuation(input: {
   remaining: number
   total: number
   agent?: string
+  worktreePath?: string
   backgroundManager?: BackgroundManager
   sessionState: SessionState
 }): Promise<void> {
@@ -23,6 +25,7 @@ export async function injectBoulderContinuation(input: {
     remaining,
     total,
     agent,
+    worktreePath,
     backgroundManager,
     sessionState,
   } = input
@@ -36,21 +39,25 @@ export async function injectBoulderContinuation(input: {
     return
   }
 
+  const worktreeContext = worktreePath ? `\n\n[Worktree: ${worktreePath}]` : ""
   const prompt =
     BOULDER_CONTINUATION_PROMPT.replace(/{PLAN_NAME}/g, planName) +
-    `\n\n[Status: ${total - remaining}/${total} completed, ${remaining} remaining]`
+    `\n\n[Status: ${total - remaining}/${total} completed, ${remaining} remaining]` +
+    worktreeContext
 
   try {
     log(`[${HOOK_NAME}] Injecting boulder continuation`, { sessionID, planName, remaining })
 
-    const model = await resolveRecentModelForSession(ctx, sessionID)
+    const promptContext = await resolveRecentPromptContextForSession(ctx, sessionID)
+    const inheritedTools = resolveInheritedPromptTools(sessionID, promptContext.tools)
 
     await ctx.client.session.promptAsync({
       path: { id: sessionID },
       body: {
         agent: agent ?? "atlas",
-        ...(model !== undefined ? { model } : {}),
-        parts: [{ type: "text", text: prompt }],
+        ...(promptContext.model !== undefined ? { model: promptContext.model } : {}),
+        ...(inheritedTools ? { tools: inheritedTools } : {}),
+        parts: [createInternalAgentTextPart(prompt)],
       },
       query: { directory: ctx.directory },
     })
@@ -59,6 +66,7 @@ export async function injectBoulderContinuation(input: {
     log(`[${HOOK_NAME}] Boulder continuation injected`, { sessionID })
   } catch (err) {
     sessionState.promptFailureCount += 1
+    sessionState.lastFailureAt = Date.now()
     log(`[${HOOK_NAME}] Boulder continuation failed`, {
       sessionID,
       error: String(err),
