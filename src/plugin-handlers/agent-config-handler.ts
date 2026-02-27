@@ -76,12 +76,13 @@ export async function applyAgentConfig(params: {
   const currentModel = params.config.model as string | undefined;
   const disabledSkills = new Set<string>(params.pluginConfig.disabled_skills ?? []);
   const useTaskSystem = params.pluginConfig.experimental?.task_system ?? false;
+  const disableOmoEnv = params.pluginConfig.experimental?.disable_omo_env ?? false;
 
   const builtinAgents = await createBuiltinAgents(
     migratedDisabledAgents,
     params.pluginConfig.agents,
     params.ctx.directory,
-    undefined,
+    currentModel,
     params.pluginConfig.categories,
     params.pluginConfig.git_master,
     allDiscoveredSkills,
@@ -90,6 +91,7 @@ export async function applyAgentConfig(params: {
     currentModel,
     disabledSkills,
     useTaskSystem,
+    disableOmoEnv,
   );
 
   const includeClaudeAgents = params.pluginConfig.claude_code?.agents ?? true;
@@ -103,6 +105,15 @@ export async function applyAgentConfig(params: {
       value ? migrateAgentConfig(value as Record<string, unknown>) : value,
     ]),
   );
+
+  const disabledAgentNames = new Set(
+    (migratedDisabledAgents ?? []).map(a => a.toLowerCase())
+  );
+
+  const filterDisabledAgents = (agents: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(agents).filter(([name]) => !disabledAgentNames.has(name.toLowerCase()))
+    );
 
   const isSisyphusEnabled = params.pluginConfig.sisyphus_agent?.disabled !== true;
   const builderEnabled =
@@ -192,9 +203,9 @@ export async function applyAgentConfig(params: {
       ...Object.fromEntries(
         Object.entries(builtinAgents).filter(([key]) => key !== "sisyphus"),
       ),
-      ...userAgents,
-      ...projectAgents,
-      ...pluginAgents,
+      ...filterDisabledAgents(userAgents),
+      ...filterDisabledAgents(projectAgents),
+      ...filterDisabledAgents(pluginAgents),
       ...filteredConfigAgents,
       build: { ...migratedBuild, mode: "subagent", hidden: true },
       ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
@@ -202,9 +213,9 @@ export async function applyAgentConfig(params: {
   } else {
     params.config.agent = {
       ...builtinAgents,
-      ...userAgents,
-      ...projectAgents,
-      ...pluginAgents,
+      ...filterDisabledAgents(userAgents),
+      ...filterDisabledAgents(projectAgents),
+      ...filterDisabledAgents(pluginAgents),
       ...configAgent,
     };
   }

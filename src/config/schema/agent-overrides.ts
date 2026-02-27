@@ -1,9 +1,11 @@
 import { z } from "zod"
+import { FallbackModelsSchema } from "./fallback-models"
 import { AgentPermissionSchema } from "./internal/permission"
 
 export const AgentOverrideConfigSchema = z.object({
   /** @deprecated Use `category` instead. Model is inherited from category defaults. */
   model: z.string().optional(),
+  fallback_models: FallbackModelsSchema.optional(),
   variant: z.string().optional(),
   /** Category name to inherit model and other settings from CategoryConfig */
   category: z.string().optional(),
@@ -32,24 +34,34 @@ export const AgentOverrideConfigSchema = z.object({
       budgetTokens: z.number().optional(),
     })
     .optional(),
-  /** Ultrawork model override configuration. */
-  ultrawork: z.object({
-    model: z.string(),
-    variant: z.string().optional(),
-  }).optional(),
   /** Reasoning effort level (OpenAI). Overrides category and default settings. */
   reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
   /** Text verbosity level. */
   textVerbosity: z.enum(["low", "medium", "high"]).optional(),
   /** Provider-specific options. Passed directly to OpenCode SDK. */
   providerOptions: z.record(z.string(), z.unknown()).optional(),
+  /** Per-message ultrawork override model/variant when ultrawork keyword is detected. */
+  ultrawork: z
+    .object({
+      model: z.string().optional(),
+      variant: z.string().optional(),
+    })
+    .optional(),
+  compaction: z
+    .object({
+      model: z.string().optional(),
+      variant: z.string().optional(),
+    })
+    .optional(),
 })
 
 export const AgentOverridesSchema = z.object({
   build: AgentOverrideConfigSchema.optional(),
   plan: AgentOverrideConfigSchema.optional(),
   sisyphus: AgentOverrideConfigSchema.optional(),
-  hephaestus: AgentOverrideConfigSchema.optional(),
+  hephaestus: AgentOverrideConfigSchema.extend({
+    allow_non_gpt_model: z.boolean().optional(),
+  }).optional(),
   "sisyphus-junior": AgentOverrideConfigSchema.optional(),
   "OpenCode-Builder": AgentOverrideConfigSchema.optional(),
   prometheus: AgentOverrideConfigSchema.optional(),

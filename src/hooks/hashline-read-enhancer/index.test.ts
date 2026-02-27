@@ -1,248 +1,280 @@
-import { describe, it, expect, beforeEach } from "bun:test"
-import { createHashlineReadEnhancerHook } from "./hook"
+/// <reference types="bun-types" />
+
+import { describe, it, expect } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
+import { createHashlineReadEnhancerHook } from "./hook"
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 
-//#given - Test setup helpers
-function createMockContext(): PluginInput {
+function mockCtx(): PluginInput {
   return {
-    client: {} as unknown as PluginInput["client"],
+    client: {} as PluginInput["client"],
     directory: "/test",
+    project: "/test" as unknown as PluginInput["project"],
+    worktree: "/test",
+    serverUrl: "http://localhost" as unknown as PluginInput["serverUrl"],
+    $: {} as PluginInput["$"],
   }
 }
 
-interface TestConfig {
-  hashline_edit?: { enabled: boolean }
-}
+describe("hashline-read-enhancer", () => {
+  it("hashifies only file content lines in read output", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const output = {
+      title: "demo.ts",
+      output: [
+        "<path>/tmp/demo.ts</path>",
+        "<type>file</type>",
+        "<content>",
+        "1: const x = 1",
+        "2: const y = 2",
+        "",
+        "(End of file - total 2 lines)",
+        "</content>",
+        "",
+        "<system-reminder>",
+        "1: keep this unchanged",
+        "</system-reminder>",
+      ].join("\n"),
+      metadata: {},
+    }
 
-function createMockConfig(enabled: boolean): TestConfig {
-  return {
-    hashline_edit: { enabled },
-  }
-}
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-describe("createHashlineReadEnhancerHook", () => {
-  let mockCtx: PluginInput
-  const sessionID = "test-session-123"
-
-  beforeEach(() => {
-    mockCtx = createMockContext()
+    //#then
+    const lines = output.output.split("\n")
+    expect(lines[3]).toMatch(/^1#[ZPMQVRWSNKTXJBYH]{2}\|const x = 1$/)
+    expect(lines[4]).toMatch(/^2#[ZPMQVRWSNKTXJBYH]{2}\|const y = 2$/)
+    expect(lines[10]).toBe("1: keep this unchanged")
   })
 
-  describe("tool name matching", () => {
-    it("should process 'read' tool (lowercase)", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: hello\n2: world", metadata: {} }
+  it("hashifies inline <content> format from updated OpenCode read tool", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const output = {
+      title: "demo.ts",
+      output: [
+        "<path>/tmp/demo.ts</path>",
+        "<type>file</type>",
+        "<content>1: const x = 1",
+        "2: const y = 2",
+        "",
+        "(End of file - total 2 lines)",
+        "</content>",
+      ].join("\n"),
+      metadata: {},
+    }
 
-      //#when
-      await hook["tool.execute.after"](input, output)
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-      //#then
-      expect(output.output).toContain("1:")
-      expect(output.output).toContain("|")
-    })
-
-    it("should process 'Read' tool (mixed case)", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "Read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: hello\n2: world", metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toContain("|")
-    })
-
-    it("should process 'READ' tool (uppercase)", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "READ", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: hello\n2: world", metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toContain("|")
-    })
-
-    it("should skip non-read tools", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "edit", sessionID, callID: "call-1" }
-      const originalOutput = "1: hello\n2: world"
-      const output = { title: "Edit", output: originalOutput, metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toBe(originalOutput)
-    })
+    //#then
+    const lines = output.output.split("\n")
+    expect(lines[0]).toBe("<path>/tmp/demo.ts</path>")
+    expect(lines[1]).toBe("<type>file</type>")
+    expect(lines[2]).toBe("<content>")
+    expect(lines[3]).toMatch(/^1#[ZPMQVRWSNKTXJBYH]{2}\|const x = 1$/)
+    expect(lines[4]).toMatch(/^2#[ZPMQVRWSNKTXJBYH]{2}\|const y = 2$/)
+    expect(lines[6]).toBe("(End of file - total 2 lines)")
+    expect(lines[7]).toBe("</content>")
   })
 
-  describe("config flag check", () => {
-    it("should skip when hashline_edit is disabled", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(false))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const originalOutput = "1: hello\n2: world"
-      const output = { title: "Read", output: originalOutput, metadata: {} }
+  it("keeps OpenCode-truncated lines unhashed while hashifying normal lines", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const truncatedLine = `${"x".repeat(60)}... (line truncated to 2000 chars)`
+    const output = {
+      title: "demo.ts",
+      output: [
+        "<path>/tmp/demo.ts</path>",
+        "<type>file</type>",
+        "<content>",
+        `1: ${truncatedLine}`,
+        "2: normal line",
+        "</content>",
+      ].join("\n"),
+      metadata: {},
+    }
 
-      //#when
-      await hook["tool.execute.after"](input, output)
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-      //#then
-      expect(output.output).toBe(originalOutput)
-    })
-
-    it("should skip when hashline_edit config is missing", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, {})
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const originalOutput = "1: hello\n2: world"
-      const output = { title: "Read", output: originalOutput, metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toBe(originalOutput)
-    })
+    //#then
+    const lines = output.output.split("\n")
+    expect(lines[3]).toBe(`1: ${truncatedLine}`)
+    expect(lines[4]).toMatch(/^2#[ZPMQVRWSNKTXJBYH]{2}\|normal line$/)
   })
 
-  describe("output transformation", () => {
-    it("should transform 'N: content' format to 'N:HASH|content'", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: function hello() {\n2:   console.log('world')\n3: }", metadata: {} }
+  it("hashifies plain read output without content tags", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const output = {
+      title: "README.md",
+      output: [
+        "1: # Oh-My-OpenCode Features",
+        "2:",
+        "3: Hashline test",
+        "",
+        "(End of file - total 3 lines)",
+      ].join("\n"),
+      metadata: {},
+    }
 
-      //#when
-      await hook["tool.execute.after"](input, output)
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-      //#then
-      const lines = output.output.split("\n")
-      expect(lines[0]).toMatch(/^1:[a-f0-9]{2}\|function hello\(\) \{$/)
-      expect(lines[1]).toMatch(/^2:[a-f0-9]{2}\|  console\.log\('world'\)$/)
-      expect(lines[2]).toMatch(/^3:[a-f0-9]{2}\|\}$/)
-    })
-
-    it("should handle empty output", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "", metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toBe("")
-    })
-
-    it("should handle single line", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: const x = 1", metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toMatch(/^1:[a-f0-9]{2}\|const x = 1$/)
-    })
+    //#then
+    const lines = output.output.split("\n")
+    expect(lines[0]).toMatch(/^1#[ZPMQVRWSNKTXJBYH]{2}\|# Oh-My-OpenCode Features$/)
+    expect(lines[1]).toMatch(/^2#[ZPMQVRWSNKTXJBYH]{2}\|$/)
+    expect(lines[2]).toMatch(/^3#[ZPMQVRWSNKTXJBYH]{2}\|Hashline test$/)
+    expect(lines[4]).toBe("(End of file - total 3 lines)")
   })
 
-  describe("binary file detection", () => {
-    it("should skip binary files (no line number prefix)", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const originalOutput = "PNG\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"
-      const output = { title: "Read", output: originalOutput, metadata: {} }
+  it("hashifies read output with <file> and zero-padded pipe format", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const output = {
+      title: "demo.ts",
+      output: [
+        "<file>",
+        "00001| const x = 1",
+        "00002| const y = 2",
+        "",
+        "(End of file - total 2 lines)",
+        "</file>",
+      ].join("\n"),
+      metadata: {},
+    }
 
-      //#when
-      await hook["tool.execute.after"](input, output)
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-      //#then
-      expect(output.output).toBe(originalOutput)
-    })
-
-    it("should skip if first line doesn't match pattern", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const originalOutput = "some binary data\nmore data"
-      const output = { title: "Read", output: originalOutput, metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toBe(originalOutput)
-    })
-
-    it("should process if first line matches 'N: ' pattern", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: valid line\n2: another line", metadata: {} }
-
-      //#when
-      await hook["tool.execute.after"](input, output)
-
-      //#then
-      expect(output.output).toContain("|")
-    })
+    //#then
+    const lines = output.output.split("\n")
+    expect(lines[1]).toMatch(/^1#[ZPMQVRWSNKTXJBYH]{2}\|const x = 1$/)
+    expect(lines[2]).toMatch(/^2#[ZPMQVRWSNKTXJBYH]{2}\|const y = 2$/)
+    expect(lines[5]).toBe("</file>")
   })
 
-  describe("edge cases", () => {
-    it("should handle non-string output gracefully", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: null as unknown as string, metadata: {} }
+  it("hashifies pipe format even with leading spaces", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const output = {
+      title: "demo.ts",
+      output: [
+        "<file>",
+        "   00001| const x = 1",
+        "   00002| const y = 2",
+        "",
+        "(End of file - total 2 lines)",
+        "</file>",
+      ].join("\n"),
+      metadata: {},
+    }
 
-      //#when - should not throw
-      await hook["tool.execute.after"](input, output)
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-      //#then
-      expect(output.output).toBeNull()
-    })
+    //#then
+    const lines = output.output.split("\n")
+    expect(lines[1]).toMatch(/^1#[ZPMQVRWSNKTXJBYH]{2}\|const x = 1$/)
+    expect(lines[2]).toMatch(/^2#[ZPMQVRWSNKTXJBYH]{2}\|const y = 2$/)
+  })
 
-    it("should handle lines with no content after colon", async () => {
-      //#given
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: "1: hello\n2: \n3: world", metadata: {} }
+  it("appends simple summary for write tool instead of full hashlined content", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hashline-write-"))
+    const filePath = path.join(tempDir, "demo.ts")
+    fs.writeFileSync(filePath, "const x = 1\nconst y = 2")
+    const input = { tool: "write", sessionID: "s", callID: "c" }
+    const output = {
+      title: "write",
+      output: "Wrote file successfully.",
+      metadata: { filepath: filePath },
+    }
 
-      //#when
-      await hook["tool.execute.after"](input, output)
+    //#when
+    await hook["tool.execute.after"](input, output)
 
-      //#then
-      const lines = output.output.split("\n")
-      expect(lines[0]).toMatch(/^1:[a-f0-9]{2}\|hello$/)
-      expect(lines[1]).toMatch(/^2:[a-f0-9]{2}\|$/)
-      expect(lines[2]).toMatch(/^3:[a-f0-9]{2}\|world$/)
-    })
+    //#then
+    expect(output.output).toContain("File written successfully.")
+    expect(output.output).toContain("2 lines written.")
+    expect(output.output).not.toContain("Updated file (LINE#ID|content):")
+    expect(output.output).not.toContain("const x = 1")
 
-    it("should handle very long lines", async () => {
-      //#given
-      const longContent = "a".repeat(1000)
-      const hook = createHashlineReadEnhancerHook(mockCtx, createMockConfig(true))
-      const input = { tool: "read", sessionID, callID: "call-1" }
-      const output = { title: "Read", output: `1: ${longContent}`, metadata: {} }
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
 
-      //#when
-      await hook["tool.execute.after"](input, output)
+  it("does not re-process write output that already contains the success marker", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hashline-idem-"))
+    const filePath = path.join(tempDir, "demo.ts")
+    fs.writeFileSync(filePath, "a\nb\nc\nd\ne")
+    const input = { tool: "write", sessionID: "s", callID: "c" }
+    const output = {
+      title: "write",
+      output: "File written successfully. 99 lines written.",
+      metadata: { filepath: filePath },
+    }
 
-      //#then
-      expect(output.output).toMatch(/^1:[a-f0-9]{2}\|a+$/)
-    })
+    //#when
+    await hook["tool.execute.after"](input, output)
+
+    //#then — guard should prevent re-reading the file and updating the count
+    expect(output.output).toBe("File written successfully. 99 lines written.")
+
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  it("does not overwrite write tool error output with success message", async () => {
+    //#given — write tool failed, but stale file exists from previous write
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: true } })
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hashline-err-"))
+    const filePath = path.join(tempDir, "demo.ts")
+    fs.writeFileSync(filePath, "const x = 1")
+    const input = { tool: "write", sessionID: "s", callID: "c" }
+    const output = {
+      title: "write",
+      output: "Error: EACCES: permission denied, open '" + filePath + "'",
+      metadata: { filepath: filePath },
+    }
+
+    //#when
+    await hook["tool.execute.after"](input, output)
+
+    //#then — error output must be preserved, not overwritten with success message
+    expect(output.output).toContain("Error: EACCES")
+    expect(output.output).not.toContain("File written successfully.")
+
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  it("skips when feature is disabled", async () => {
+    //#given
+    const hook = createHashlineReadEnhancerHook(mockCtx(), { hashline_edit: { enabled: false } })
+    const input = { tool: "read", sessionID: "s", callID: "c" }
+    const output = {
+      title: "demo.ts",
+      output: "<content>\n1: const x = 1\n</content>",
+      metadata: {},
+    }
+
+    //#when
+    await hook["tool.execute.after"](input, output)
+
+    //#then
+    expect(output.output).toBe("<content>\n1: const x = 1\n</content>")
   })
 })

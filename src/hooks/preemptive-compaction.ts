@@ -1,6 +1,9 @@
 import { log } from "../shared/logger"
+import type { OhMyOpenCodeConfig } from "../config"
 
+import { resolveCompactionModel } from "./shared/compaction-model-resolver"
 const DEFAULT_ACTUAL_LIMIT = 200_000
+const PREEMPTIVE_COMPACTION_TIMEOUT_MS = 120_000
 
 type ModelCacheStateLike = {
   anthropicContext1MEnabled: boolean
@@ -29,6 +32,26 @@ interface CachedCompactionState {
   tokens: TokenInfo
 }
 
+function withTimeout<TValue>(
+  promise: Promise<TValue>,
+  timeoutMs: number,
+  errorMessage: string,
+): Promise<TValue> {
+  let timeoutID: ReturnType<typeof setTimeout> | undefined
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutID = setTimeout(() => {
+      reject(new Error(errorMessage))
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutID !== undefined) {
+      clearTimeout(timeoutID)
+    }
+  })
+}
+
 function isAnthropicProvider(providerID: string): boolean {
   return providerID === "anthropic" || providerID === "google-vertex-anthropic"
 }
@@ -51,6 +74,7 @@ type PluginInput = {
 
 export function createPreemptiveCompactionHook(
   ctx: PluginInput,
+  pluginConfig: OhMyOpenCodeConfig,
   modelCacheState?: ModelCacheStateLike,
 ) {
   const compactionInProgress = new Set<string>()
@@ -84,11 +108,22 @@ export function createPreemptiveCompactionHook(
     compactionInProgress.add(sessionID)
 
     try {
-      await ctx.client.session.summarize({
-        path: { id: sessionID },
-        body: { providerID: cached.providerID, modelID, auto: true } as never,
-        query: { directory: ctx.directory },
-      })
+      const { providerID: targetProviderID, modelID: targetModelID } = resolveCompactionModel(
+        pluginConfig,
+        sessionID,
+        cached.providerID,
+        modelID
+      )
+
+      await withTimeout(
+        ctx.client.session.summarize({
+          path: { id: sessionID },
+          body: { providerID: targetProviderID, modelID: targetModelID, auto: true } as never,
+          query: { directory: ctx.directory },
+        }),
+        PREEMPTIVE_COMPACTION_TIMEOUT_MS,
+        `Compaction summarize timed out after ${PREEMPTIVE_COMPACTION_TIMEOUT_MS}ms`,
+      )
 
       compactedSessions.add(sessionID)
     } catch (error) {

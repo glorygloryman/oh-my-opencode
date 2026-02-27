@@ -1,14 +1,53 @@
-# src/hooks/ — 44 Lifecycle Hooks
+# src/hooks/ — 46 Lifecycle Hooks
 
-**Generated:** 2026-02-18
+**Generated:** 2026-02-24
 
 ## OVERVIEW
 
-44 hooks across 39 directories + 6 standalone files. Three-tier composition: Core(35) + Continuation(7) + Skill(2). All hooks follow `createXXXHook(deps) → HookFunction` factory pattern.
+46 hooks across 39 directories + 6 standalone files. Three-tier composition: Core(37) + Continuation(7) + Skill(2). All hooks follow `createXXXHook(deps) → HookFunction` factory pattern.
 
 ## HOOK TIERS
 
-### Tier 1: Session Hooks (22) — `create-session-hooks.ts`
+### Tier 1: Session Hooks (23) — `create-session-hooks.ts`
+## STRUCTURE
+```
+hooks/
+├── atlas/                      # Main orchestration (757 lines)
+├── anthropic-context-window-limit-recovery/ # Auto-summarize
+├── todo-continuation-enforcer.ts # Force TODO completion
+├── ralph-loop/                 # Self-referential dev loop
+├── claude-code-hooks/          # settings.json compat layer - see AGENTS.md
+├── comment-checker/            # Prevents AI slop
+├── auto-slash-command/         # Detects /command patterns
+├── rules-injector/             # Conditional rules
+├── directory-agents-injector/  # Auto-injects AGENTS.md
+├── directory-readme-injector/  # Auto-injects README.md
+├── edit-error-recovery/        # Recovers from failures
+├── thinking-block-validator/   # Ensures valid <thinking>
+├── context-window-monitor.ts   # Reminds of headroom
+├── session-recovery/           # Auto-recovers from crashes
+├── think-mode/                 # Dynamic thinking budget
+├── keyword-detector/           # ultrawork/search/analyze modes
+├── background-notification/    # OS notification
+├── prometheus-md-only/         # Planner read-only mode
+├── agent-usage-reminder/       # Specialized agent hints
+├── auto-update-checker/        # Plugin update check
+├── tool-output-truncator.ts    # Prevents context bloat
+├── compaction-context-injector/ # Injects context on compaction
+├── delegate-task-retry/        # Retries failed delegations
+├── interactive-bash-session/   # Tmux session management
+├── non-interactive-env/        # Non-TTY environment handling
+├── start-work/                 # Sisyphus work session starter
+├── task-resume-info/           # Resume info for cancelled tasks
+├── question-label-truncator/   # Auto-truncates question labels
+├── category-skill-reminder/    # Reminds of category skills
+├── empty-task-response-detector.ts # Detects empty responses
+├── sisyphus-junior-notepad/    # Sisyphus Junior notepad
+├── stop-continuation-guard/    # Guards stop continuation
+├── subagent-question-blocker/  # Blocks subagent questions
+├── runtime-fallback/           # Auto-switch models on API errors
+└── index.ts                    # Hook aggregation + registration
+```
 
 | Hook | Event | Purpose |
 |------|-------|---------|
@@ -31,11 +70,12 @@
 | questionLabelTruncator | tool.execute.before | Truncate long question labels |
 | taskResumeInfo | chat.message | Inject task context on resume |
 | anthropicEffort | chat.params | Adjust reasoning effort level |
-| jsonErrorRecovery | tool.execute.after | Detect JSON parse errors, inject correction reminder |
-| sisyphusGptHephaestusReminder | chat.message | Toast warning when Sisyphus uses GPT model |
-| taskReminder | tool.execute.after | Remind about task tools after 10 turns without usage |
+| modelFallback | chat.params | Provider-level model fallback on errors |
+| noSisyphusGpt | chat.message | Block Sisyphus from using GPT models (toast warning) |
+| noHephaestusNonGpt | chat.message | Block Hephaestus from using non-GPT models |
+| runtimeFallback | event | Auto-switch models on API provider errors |
 
-### Tier 2: Tool Guard Hooks (9) — `create-tool-guard-hooks.ts`
+### Tier 2: Tool Guard Hooks (10) — `create-tool-guard-hooks.ts`
 
 | Hook | Event | Purpose |
 |------|-------|---------|
@@ -48,6 +88,7 @@
 | tasksTodowriteDisabler | tool.execute.before | Disable TodoWrite when task system active |
 | writeExistingFileGuard | tool.execute.before | Require Read before Write on existing files |
 | hashlineReadEnhancer | tool.execute.after | Enhance Read output with line hashes |
+| jsonErrorRecovery | tool.execute.after | Detect JSON parse errors, inject correction reminder |
 
 ### Tier 3: Transform Hooks (4) — `create-transform-hooks.ts`
 

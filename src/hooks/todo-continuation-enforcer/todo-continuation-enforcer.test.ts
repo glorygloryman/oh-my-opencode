@@ -41,6 +41,12 @@ function createFakeTimers(): FakeTimers {
     return delay < 0 ? 0 : delay
   }
 
+  const flushMicrotasks = async (iterations: number = 5) => {
+    for (let index = 0; index < iterations; index++) {
+      await Promise.resolve()
+    }
+  }
+
   const schedule = (callback: TimerCallback, delay: number | undefined, interval: number | null, args: any[]) => {
     const id = nextId++
     timers.set(id, {
@@ -130,16 +136,16 @@ function createFakeTimers(): FakeTimers {
         cleared.delete(next.id)
       }
 
-      await Promise.resolve()
+      await flushMicrotasks()
     }
     timerNow = target
-    await Promise.resolve()
+    await flushMicrotasks()
   }
 
   const advanceClockBy = async (ms: number) => {
     const clamped = Math.max(0, ms)
     clockNow += clamped
-    await Promise.resolve()
+    await flushMicrotasks()
   }
 
   const restore = () => {
@@ -276,6 +282,31 @@ describe("todo-continuation-enforcer", () => {
     const mockInput = createMockPluginInput()
     mockInput.client.session.todo = async () => ({ data: [
       { id: "1", content: "Task 1", status: "completed", priority: "high" },
+    ]})
+
+    const hook = createTodoContinuationEnforcer(mockInput, {})
+
+    // when - session goes idle
+    await hook.handler({
+      event: { type: "session.idle", properties: { sessionID } },
+    })
+
+    await fakeTimers.advanceBy(3000)
+
+    // then - no continuation injected
+    expect(promptCalls).toHaveLength(0)
+  })
+
+  test("should not inject when remaining todos are blocked or deleted", async () => {
+    // given - session where non-completed todos are only blocked/deleted
+    const sessionID = "main-blocked-deleted"
+    setMainSession(sessionID)
+
+    const mockInput = createMockPluginInput()
+    mockInput.client.session.todo = async () => ({ data: [
+      { id: "1", content: "Blocked task", status: "blocked", priority: "high" },
+      { id: "2", content: "Deleted task", status: "deleted", priority: "medium" },
+      { id: "3", content: "Done task", status: "completed", priority: "low" },
     ]})
 
     const hook = createTodoContinuationEnforcer(mockInput, {})
@@ -1608,6 +1639,31 @@ describe("todo-continuation-enforcer", () => {
     expect(promptCalls).toHaveLength(0)
   })
 
+  test("should not inject when isContinuationStopped becomes true during countdown", async () => {
+    // given - session where continuation is not stopped at idle time but stops during countdown
+    const sessionID = "main-race-condition"
+    setMainSession(sessionID)
+    let stopped = false
+
+    const hook = createTodoContinuationEnforcer(createMockPluginInput(), {
+      isContinuationStopped: () => stopped,
+    })
+
+    // when - session goes idle with continuation not yet stopped
+    await hook.handler({
+      event: { type: "session.idle", properties: { sessionID } },
+    })
+
+    // when - stop-continuation fires during the 2s countdown window
+    stopped = true
+
+    // when - countdown elapses and injectContinuation fires
+    await fakeTimers.advanceBy(3000)
+
+    // then - no injection because isContinuationStopped became true before injectContinuation ran
+    expect(promptCalls).toHaveLength(0)
+  })
+
   test("should inject when isContinuationStopped returns false", async () => {
     fakeTimers.restore()
     // given - session with continuation not stopped
@@ -1632,7 +1688,6 @@ describe("todo-continuation-enforcer", () => {
   test("should cancel all countdowns via cancelAllCountdowns", async () => {
     // given - multiple sessions with running countdowns
     const session1 = "main-cancel-all-1"
-    const session2 = "main-cancel-all-2"
     setMainSession(session1)
 
     const hook = createTodoContinuationEnforcer(createMockPluginInput(), {})

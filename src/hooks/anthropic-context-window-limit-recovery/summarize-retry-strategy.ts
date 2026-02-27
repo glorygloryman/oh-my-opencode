@@ -1,20 +1,46 @@
 import type { AutoCompactState } from "./types"
+import type { OhMyOpenCodeConfig } from "../../config"
 import { RETRY_CONFIG } from "./types"
 import type { Client } from "./client"
 import { clearSessionState, getEmptyContentAttempt, getOrCreateRetryState } from "./state"
 import { sanitizeEmptyMessagesBeforeSummarize } from "./message-builder"
 import { fixEmptyMessages } from "./empty-content-recovery"
 
+import { resolveCompactionModel } from "../shared/compaction-model-resolver"
+
+const SUMMARIZE_RETRY_TOTAL_TIMEOUT_MS = 120_000
 export async function runSummarizeRetryStrategy(params: {
   sessionID: string
   msg: Record<string, unknown>
   autoCompactState: AutoCompactState
   client: Client
   directory: string
+  pluginConfig: OhMyOpenCodeConfig
   errorType?: string
   messageIndex?: number
 }): Promise<void> {
   const retryState = getOrCreateRetryState(params.autoCompactState, params.sessionID)
+  const now = Date.now()
+
+  if (retryState.firstAttemptTime === 0) {
+    retryState.firstAttemptTime = now
+  }
+
+  const elapsedTimeMs = now - retryState.firstAttemptTime
+  if (elapsedTimeMs >= SUMMARIZE_RETRY_TOTAL_TIMEOUT_MS) {
+    clearSessionState(params.autoCompactState, params.sessionID)
+    await params.client.tui
+      .showToast({
+        body: {
+          title: "Auto Compact Timed Out",
+          message: "Compaction retries exceeded the timeout window. Please start a new session.",
+          variant: "error",
+          duration: 5000,
+        },
+      })
+      .catch(() => {})
+    return
+  }
 
   if (params.errorType?.includes("non-empty content")) {
     const attempt = getEmptyContentAttempt(params.autoCompactState, params.sessionID)
@@ -49,6 +75,7 @@ export async function runSummarizeRetryStrategy(params: {
 
   if (Date.now() - retryState.lastAttemptTime > 300000) {
     retryState.attempt = 0
+    retryState.firstAttemptTime = Date.now()
     params.autoCompactState.truncateStateBySession.delete(params.sessionID)
   }
 
@@ -74,7 +101,14 @@ export async function runSummarizeRetryStrategy(params: {
           })
           .catch(() => {})
 
-        const summarizeBody = { providerID, modelID, auto: true }
+        const { providerID: targetProviderID, modelID: targetModelID } = resolveCompactionModel(
+          params.pluginConfig,
+          params.sessionID,
+          providerID,
+          modelID
+        )
+
+        const summarizeBody = { providerID: targetProviderID, modelID: targetModelID, auto: true }
         await params.client.session.summarize({
           path: { id: params.sessionID },
           body: summarizeBody as never,
@@ -82,10 +116,26 @@ export async function runSummarizeRetryStrategy(params: {
         })
         return
       } catch {
+        const remainingTimeMs = SUMMARIZE_RETRY_TOTAL_TIMEOUT_MS - (Date.now() - retryState.firstAttemptTime)
+        if (remainingTimeMs <= 0) {
+          clearSessionState(params.autoCompactState, params.sessionID)
+          await params.client.tui
+            .showToast({
+              body: {
+                title: "Auto Compact Timed Out",
+                message: "Compaction retries exceeded the timeout window. Please start a new session.",
+                variant: "error",
+                duration: 5000,
+              },
+            })
+            .catch(() => {})
+          return
+        }
+
         const delay =
           RETRY_CONFIG.initialDelayMs *
           Math.pow(RETRY_CONFIG.backoffFactor, retryState.attempt - 1)
-        const cappedDelay = Math.min(delay, RETRY_CONFIG.maxDelayMs)
+        const cappedDelay = Math.min(delay, RETRY_CONFIG.maxDelayMs, remainingTimeMs)
 
         setTimeout(() => {
           void runSummarizeRetryStrategy(params)
