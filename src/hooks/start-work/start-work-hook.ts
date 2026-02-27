@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs"
+import { existsSync, mkdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
 import {
@@ -14,6 +14,7 @@ import {
 import { log } from "../../shared/logger"
 import { updateSessionAgent } from "../../features/claude-code-session-state"
 import { detectWorktreePath } from "./worktree-detector"
+import { syncPlanToProjectDocs } from "./sync-plan"
 import { parseUserRequest } from "./parse-user-request"
 
 export const HOOK_NAME = "start-work" as const
@@ -27,11 +28,7 @@ interface StartWorkHookOutput {
   parts: Array<{ type: string; text?: string }>
 }
 
-interface SyncPlanResult {
-  success: boolean
-  targetPath?: string
-  error?: string
-}
+
 
 function findPlanByName(plans: string[], requestedName: string): string | null {
   const lowerName = requestedName.toLowerCase()
@@ -41,28 +38,7 @@ function findPlanByName(plans: string[], requestedName: string): string | null {
   return partialMatch || null
 }
 
-function syncPlanToProjectDocs(ctx: PluginInput, planPath: string): SyncPlanResult {
-  try {
-    const stat = statSync(planPath)
-    const date = new Date(stat.mtimeMs)
-    const dateStr = date.toISOString().split("T")[0] // YYYY-MM-DD
-    const planName = getPlanName(planPath)
-    const targetPath = join(ctx.directory, "project-docs", "plans", `${dateStr}-${planName}.md`)
-    
-    const targetDir = join(ctx.directory, "project-docs", "plans")
-    if (!existsSync(targetDir)) {
-      mkdirSync(targetDir, { recursive: true })
-    }
-    
-    const content = readFileSync(planPath, "utf-8")
-    writeFileSync(targetPath, content, "utf-8")
-    
-    return { success: true, targetPath }
-  } catch (e) {
-    const err = e instanceof Error ? e.message : String(e)
-    return { success: false, error: err }
-  }
-}
+
 
 const MODEL_DECIDES_WORKTREE_BLOCK = `
 ## Worktree Setup Required
