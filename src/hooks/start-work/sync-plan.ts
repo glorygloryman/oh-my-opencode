@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, statSync, symlinkSync, rmSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { join, relative, dirname } from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
 import { getPlanName } from "../../features/boulder-state"
 
@@ -29,12 +29,12 @@ export function syncPlanToProjectDocs(ctx: PluginInput, planPath: string): SyncP
 
     const targetPath = join(targetDir, `${dateStr}-${cleanPlanName}.md`)
 
-    if (existsSync(targetPath)) {
-      rmSync(targetPath, { force: true })
-    }
+    // Unconditionally forcefully remove old softlinks (including potential dead links).
+    // Using existsSync would erroneously yield "false" if the link itself exists but the target was deleted
+    rmSync(targetPath, { force: true })
 
-    const absolutePlanPath = resolve(planPath)
-    symlinkSync(absolutePlanPath, targetPath)
+    const relativePlanPath = relative(dirname(targetPath), planPath)
+    symlinkSync(relativePlanPath, targetPath)
 
     return { success: true, targetPath }
   } catch (e) {

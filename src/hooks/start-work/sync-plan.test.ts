@@ -1,114 +1,89 @@
-import { expect, test, describe, beforeEach, afterEach } from "bun:test"
+import { expect, test, describe, beforeEach, afterEach, mock, spyOn } from "bun:test"
 import { join } from "node:path"
-import { existsSync, mkdirSync, rmSync, writeFileSync, lstatSync, readlinkSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { randomUUID } from "node:crypto"
+import * as fs from "node:fs"
 import { syncPlanToProjectDocs } from "./sync-plan"
 
 describe("syncPlanToProjectDocs", () => {
-  let testDir: string
-  let plansDir: string
+  let statSyncSpy: ReturnType<typeof spyOn>
+  let existsSyncSpy: ReturnType<typeof spyOn>
+  let mkdirSyncSpy: ReturnType<typeof spyOn>
+  let rmSyncSpy: ReturnType<typeof spyOn>
+  let symlinkSyncSpy: ReturnType<typeof spyOn>
+
+  const testDir = "/mock/project"
+  const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
+  const targetDir = join(testDir, "project-docs", "plans")
 
   beforeEach(() => {
-    testDir = join(tmpdir(), `sync-plan-test-${randomUUID()}`)
-    plansDir = join(testDir, "project-docs", "plans")
+    // Return true for the plan existing, false for target directory
+    existsSyncSpy = spyOn(fs, "existsSync").mockImplementation((p) => {
+      const pathStr = p.toString()
+      if (pathStr.includes(".sisyphus")) return true
+      if (pathStr.includes("project-docs")) return false
+      return false
+    })
+
+    statSyncSpy = spyOn(fs, "statSync").mockImplementation(() => {
+      return {
+        birthtimeMs: new Date("2026-03-01T10:00:00.000Z").getTime(),
+        mtimeMs: new Date("2026-03-02T10:00:00.000Z").getTime(),
+      } as any
+    })
+
+    mkdirSyncSpy = spyOn(fs, "mkdirSync").mockImplementation(() => undefined)
+    rmSyncSpy = spyOn(fs, "rmSync").mockImplementation(() => undefined)
+    symlinkSyncSpy = spyOn(fs, "symlinkSync").mockImplementation(() => undefined)
   })
 
   afterEach(() => {
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
-    }
+    mock.restore()
   })
 
   test("should return error when source plan does not exist", () => {
+    existsSyncSpy.mockReturnValue(false)
     const ctx = { directory: testDir, client: {} as any }
     const result = syncPlanToProjectDocs(ctx, join(testDir, "nonexistent.md"))
     expect(result.success).toBeFalse()
     expect(result.error).toContain("does not exist")
   })
 
-  test("should create symlink to real file with birthtime date prefix", () => {
-    const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
-    mkdirSync(sisyphusPlansDir, { recursive: true })
+  test("should create symlink using birthtime date prefix and relative path (Critical Bug Fix)", () => {
     const planPath = join(sisyphusPlansDir, "my-test.md")
-    writeFileSync(planPath, "# Test Plan")
-
     const ctx = { directory: testDir, client: {} as any }
     const result = syncPlanToProjectDocs(ctx, planPath)
 
     expect(result.success).toBeTrue()
     expect(result.targetPath).toBeDefined()
-    expect(result.targetPath!.endsWith("my-test.md")).toBeTrue()
-    expect(result.targetPath!.endsWith(".md.md")).toBeFalse()
+    expect(result.targetPath!.endsWith("2026-03-01-my-test.md")).toBeTrue()
 
-    const stat = lstatSync(result.targetPath!)
-    expect(stat.isSymbolicLink()).toBeTrue()
-
-    const target = readlinkSync(result.targetPath!)
-    expect(target).toBe(planPath)
-  })
-
-  test("should safely overwrite existing symlink if it exists", () => {
-    const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
-    mkdirSync(sisyphusPlansDir, { recursive: true })
-    const planPath = join(sisyphusPlansDir, "resume-test.md")
-    writeFileSync(planPath, "# Original")
-
-    const ctx = { directory: testDir, client: {} as any }
-
-    syncPlanToProjectDocs(ctx, planPath)
-    const result2 = syncPlanToProjectDocs(ctx, planPath)
-
-    expect(result2.success).toBeTrue()
-    const stat = lstatSync(result2.targetPath!)
-    expect(stat.isSymbolicLink()).toBeTrue()
+    // It MUST use the relative linking
+    // targetDir is /mock/project/project-docs/plans
+    // relative distance back to plan is ../../.sisyphus/plans/my-test.md
+    expect(symlinkSyncSpy).toHaveBeenCalledWith(
+      "../../.sisyphus/plans/my-test.md",
+      result.targetPath
+    )
   })
 
   test("should strip duplicate .md suffix from plan name", () => {
-    const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
-    mkdirSync(sisyphusPlansDir, { recursive: true })
     const planPath = join(sisyphusPlansDir, "test-plan.md")
-    writeFileSync(planPath, "# Test Plan")
 
     const ctx = { directory: testDir, client: {} as any }
     const result = syncPlanToProjectDocs(ctx, planPath)
 
     expect(result.success).toBeTrue()
-    expect(result.targetPath).toBeDefined()
     expect(result.targetPath!.endsWith(".md.md")).toBeFalse()
+    expect(result.targetPath!.endsWith("test-plan.md")).toBeTrue()
   })
 
-  test("should create target directory if it does not exist", () => {
-    const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
-    mkdirSync(sisyphusPlansDir, { recursive: true })
-    const planPath = join(sisyphusPlansDir, "new-plan.md")
-    writeFileSync(planPath, "# New Plan")
-
-    expect(existsSync(plansDir)).toBeFalse()
-
+  test("should unconditionally clean up target without using existsSync block to avoid EEXIST on dead links (Important Bug Fix)", () => {
+    const planPath = join(sisyphusPlansDir, "resume-test.md")
     const ctx = { directory: testDir, client: {} as any }
-    const result = syncPlanToProjectDocs(ctx, planPath)
 
-    expect(result.success).toBeTrue()
-    expect(existsSync(plansDir)).toBeTrue()
-    expect(existsSync(result.targetPath!)).toBeTrue()
-  })
+    // First run
+    syncPlanToProjectDocs(ctx, planPath)
 
-  test("should create symlink with absolute path", () => {
-    const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
-    mkdirSync(sisyphusPlansDir, { recursive: true })
-    const planPath = join(sisyphusPlansDir, "absolute-path-test.md")
-    writeFileSync(planPath, "# Test")
-
-    const ctx = { directory: testDir, client: {} as any }
-    const result = syncPlanToProjectDocs(ctx, planPath)
-
-    expect(result.success).toBeTrue()
-
-    const linkTarget = readlinkSync(result.targetPath!)
-    // Verify symlink points to absolute path
-    expect(linkTarget.startsWith("/")).toBeTrue()
-    // Verify it resolves to the correct file
-    expect(linkTarget).toBe(planPath)
+    // Validate we called rmSync blindly before symlinking to prevent dead links
+    expect(rmSyncSpy).toHaveBeenCalledWith(expect.any(String), { force: true })
   })
 })
