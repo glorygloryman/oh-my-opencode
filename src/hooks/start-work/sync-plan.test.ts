@@ -93,4 +93,22 @@ describe("syncPlanToProjectDocs", () => {
     expect(existsSync(plansDir)).toBeTrue()
     expect(existsSync(result.targetPath!)).toBeTrue()
   })
+
+  test("should create symlink with absolute path", () => {
+    const sisyphusPlansDir = join(testDir, ".sisyphus", "plans")
+    mkdirSync(sisyphusPlansDir, { recursive: true })
+    const planPath = join(sisyphusPlansDir, "absolute-path-test.md")
+    writeFileSync(planPath, "# Test")
+
+    const ctx = { directory: testDir, client: {} as any }
+    const result = syncPlanToProjectDocs(ctx, planPath)
+
+    expect(result.success).toBeTrue()
+
+    const linkTarget = readlinkSync(result.targetPath!)
+    // Verify symlink points to absolute path
+    expect(linkTarget.startsWith("/")).toBeTrue()
+    // Verify it resolves to the correct file
+    expect(linkTarget).toBe(planPath)
+  })
 })

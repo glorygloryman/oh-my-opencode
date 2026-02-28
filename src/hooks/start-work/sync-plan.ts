@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, statSync, lstatSync, symlinkSync, rmSync } from "node:fs"
-import { join } from "node:path"
+import { existsSync, mkdirSync, statSync, symlinkSync, rmSync } from "node:fs"
+import { join, resolve } from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
 import { getPlanName } from "../../features/boulder-state"
 
@@ -33,7 +33,8 @@ export function syncPlanToProjectDocs(ctx: PluginInput, planPath: string): SyncP
       rmSync(targetPath, { force: true })
     }
 
-    symlinkSync(planPath, targetPath)
+    const absolutePlanPath = resolve(planPath)
+    symlinkSync(absolutePlanPath, targetPath)
 
     return { success: true, targetPath }
   } catch (e) {
